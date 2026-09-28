@@ -262,9 +262,10 @@ for sp, (col, name, cm) in zip((0, 1), ((c1, "H⁰ 중성 — 자유부피 홉�
 st.subheader("깊이 프로파일 c̄(z) — SIMS 비교용")
 fig, ax = plt.subplots(figsize=(9, 2.8))
 zax = np.arange(NZ) * H
-for sp, (c, lab) in enumerate(((C_H0, "H⁰"), (C_HP, "H⁺"))):
+pmax = [max(max(float(f[sp]["prof"].max()) for f in frames), 1e-12) for sp in (0, 1)]
+for sp, (c, lab) in enumerate(((C_H0, "H0 (neutral)"), (C_HP, "H+ (ion)"))):
     p = np.maximum(fr[sp]["prof"], 1e-12)
-    ax.semilogy(zax, p / max(frames[0][sp]["prof"].max(), 1e-12), color=c, lw=2, label=lab)
+    ax.semilogy(zax, p / pmax[sp], color=c, lw=2, label=lab)
 ax.set_xlabel("depth z (nm)"); ax.set_ylabel("relative concentration"); ax.set_ylim(1e-4, 2)
 ax.legend(frameon=False); ax.grid(alpha=0.25)
 st.pyplot(fig, clear_figure=True)
