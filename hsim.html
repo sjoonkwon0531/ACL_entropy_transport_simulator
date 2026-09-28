@@ -1,0 +1,635 @@
+<title>ACL 수소 수송 시뮬레이터</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600&display=swap">
+<style>
+/* Layout: preset row, grouped control bar, two species columns, charts row, assumptions */
+:root{
+  --bg:#f6f7f5; --panel:#ffffff; --ink:#1b1f24; --muted:#5b6470; --line:#dfe3de;
+  --h0:#2f5fa8; --hp:#b06c1a; --gridln:#eceee9; --ok:#2e7d4f; --warn:#a83232;
+  --font-d:'Archivo Narrow',Arial,'Helvetica Neue',sans-serif;
+  --font-b:system-ui,'Segoe UI',Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#15181b; --panel:#1d2125; --ink:#e7eaec; --muted:#98a1ab; --line:#333a41;
+  --h0:#4a7ec9; --hp:#b07a30; --gridln:#262b30; --ok:#5abd85; --warn:#e07070; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#15181b; --panel:#1d2125; --ink:#e7eaec; --muted:#98a1ab; --line:#333a41;
+  --h0:#4a7ec9; --hp:#b07a30; --gridln:#262b30; --ok:#5abd85; --warn:#e07070; color-scheme:dark }
+body{background:var(--bg); color:var(--ink); font-family:var(--font-b);
+  padding-inline:16px; padding-block:18px; margin:0; overflow-x:hidden}
+.wrap{max-width:1150px; margin:0 auto; display:flex; flex-direction:column; gap:13px}
+h1{font-family:var(--font-d); font-weight:600; font-size:1.45rem; margin:0; text-wrap:balance}
+.sub{color:var(--muted); font-size:.85rem; margin:0; max-width:72ch}
+.presets{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.presets .plab{font-family:var(--font-d); font-size:.72rem; letter-spacing:.05em;
+  text-transform:uppercase; color:var(--muted)}
+.presets button{font:inherit; font-size:.8rem; color:var(--ink); background:var(--panel);
+  border:1px solid var(--line); border-radius:14px; padding:4px 12px; cursor:pointer}
+.presets button:hover{border-color:var(--h0)}
+.bar{display:flex; flex-wrap:wrap; gap:0; background:var(--panel);
+  border:1px solid var(--line); border-radius:8px; overflow:hidden}
+.grp{display:flex; flex-wrap:wrap; gap:8px 16px; padding:10px 14px; align-items:end;
+  border-right:1px solid var(--line); border-top:1px solid var(--line); margin-top:-1px; flex:1 1 260px}
+.grp .gt{flex-basis:100%; font-family:var(--font-d); font-size:.7rem; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--muted)}
+.ctl{display:flex; flex-direction:column; gap:2px; min-width:0}
+.ctl label{font-size:.72rem; color:var(--muted)}
+.ctl output{font-size:.78rem; font-variant-numeric:tabular-nums}
+.ctl input[type=range]{width:112px; accent-color:var(--h0)}
+.ctl input[type=number]{width:70px}
+.ctl select,.ctl button,.ctl input[type=number]{font:inherit; font-size:.82rem; color:var(--ink);
+  background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:3px 7px}
+.ctl button{cursor:pointer}
+.ctl button.primary{background:var(--h0); color:#fff; border-color:var(--h0)}
+.cols{display:grid; grid-template-columns:1fr 1fr; gap:13px}
+@media (max-width:760px){ .cols{grid-template-columns:1fr} .ctl input[type=range]{width:100px} }
+.card{background:var(--panel); border:1px solid var(--line); border-radius:8px;
+  padding:12px 14px; display:flex; flex-direction:column; gap:8px; min-width:0; overflow:hidden}
+.card h2{font-family:var(--font-d); font-size:.96rem; font-weight:600; margin:0;
+  display:flex; align-items:center; gap:8px}
+.dot{width:11px; height:11px; border-radius:50%; flex:none}
+.viewrow{display:flex; gap:10px; align-items:flex-start}
+canvas.field{width:100%; max-width:100%; image-rendering:pixelated;
+  border:1px solid var(--line); border-radius:4px; background:var(--bg); cursor:crosshair}
+.xz{flex:2 1 0; min-width:0}
+.xy{flex:1 1 0; min-width:0}
+.axlab{font-family:var(--font-d); font-size:.67rem; color:var(--muted);
+  display:flex; justify-content:space-between; letter-spacing:.03em; gap:6px}
+.cbar{display:flex; align-items:center; gap:8px; font-size:.7rem; color:var(--muted); min-width:0}
+.cbar span{flex:none; white-space:nowrap}
+canvas.cb{height:10px; flex:1 1 0; min-width:0; border-radius:3px; border:1px solid var(--line)}
+.stats{display:flex; gap:6px 14px; flex-wrap:wrap; font-size:.79rem; color:var(--muted)}
+.stats b{color:var(--ink); font-variant-numeric:tabular-nums; font-weight:600}
+.charts{display:grid; grid-template-columns:repeat(auto-fit,minmax(235px,1fr)); gap:13px}
+.chart h3{font-family:var(--font-d); font-size:.8rem; font-weight:600; margin:0 0 4px;
+  color:var(--muted); letter-spacing:.03em; text-transform:uppercase}
+canvas.curve{width:100%; height:150px}
+.legend{display:flex; gap:12px 16px; font-size:.76rem; color:var(--muted); margin-top:2px; flex-wrap:wrap; align-items:center}
+.legend span{display:inline-flex; align-items:center; gap:5px; white-space:nowrap}
+.legend i{width:14px; height:3px; border-radius:2px; display:inline-block; flex:none}
+.legend i.gh{background:repeating-linear-gradient(90deg,var(--muted) 0 3px,transparent 3px 6px)}
+.cons{margin-left:auto; font-variant-numeric:tabular-nums}
+.cons b.good{color:var(--ok)} .cons b.bad{color:var(--warn)}
+details{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 14px}
+summary{cursor:pointer; font-family:var(--font-d); font-weight:600; font-size:.9rem}
+details p, details li, details td, details th{font-size:.84rem; line-height:1.55}
+details table{border-collapse:collapse; margin:8px 0}
+details td, details th{border:1px solid var(--line); padding:4px 9px; text-align:left}
+details th{font-family:var(--font-d); font-size:.75rem; text-transform:uppercase;
+  letter-spacing:.04em; color:var(--muted)}
+details .fm{color:var(--muted)}
+.tip{position:fixed; pointer-events:none; background:var(--panel); border:1px solid var(--line);
+  border-radius:6px; padding:5px 8px; font-size:.74rem; box-shadow:0 2px 8px rgba(0,0,0,.18);
+  font-variant-numeric:tabular-nums; z-index:9}
+.note{font-size:.76rem; color:var(--muted); max-width:82ch}
+.toast{position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+  background:var(--ink); color:var(--bg); border-radius:8px; padding:8px 16px; font-size:.85rem; z-index:10}
+</style>
+
+<div class="wrap">
+  <div>
+    <h1>ACL 수소 수송 시뮬레이터</h1>
+    <p class="sub">비정질 탄소 하부막(ACL) 3차원 셀에서 중성 수소 H⁰와 수소 이온 H⁺의 침투·포획·방출을
+    실단위(초, nm)로 봅니다. 온도는 Arrhenius로, 재료 노브(sp²/sp³, 연결 복잡도 엔트로피)는 국소
+    확산·포획장으로 들어갑니다. 깊이 프로파일은 SIMS 비교용, 질량 보존 오차는 수치 신뢰 지표입니다.
+    기본값은 트렌드 수준 가정이며 하단 가정표에서 근거와 조정 범위를 밝힙니다.</p>
+  </div>
+
+  <div class="presets"><span class="plab">프리셋</span>
+    <button data-p="std">표준 ACL (sp² 60%)</button>
+    <button data-p="tac">치밀 ta-C형 (sp³ 80%)</button>
+    <button data-p="low">저밀도·고불균일</button>
+    <button data-p="hot">고온 PEB 250°C</button>
+  </div>
+
+  <div class="bar">
+    <div class="grp"><span class="gt">재료</span>
+      <div class="ctl"><label for="rsp">sp²/sp³ 비</label>
+        <input type="range" id="rsp" min="0.2" max="5" step="0.1" value="1.5"><output id="rspv"></output></div>
+      <div class="ctl"><label for="sg">연결 엔트로피 S_G</label>
+        <input type="range" id="sg" min="0" max="2" step="0.05" value="1.0"><output id="sgv"></output></div>
+      <div class="ctl"><label for="nt">트랩 사이트 밀도</label>
+        <input type="range" id="nt" min="0.2" max="3" step="0.1" value="1.0"><output id="ntv"></output></div>
+      <div class="ctl"><label for="seed">무질서장 시드</label>
+        <input type="number" id="seed" min="1" max="9999" step="1" value="929"></div>
+    </div>
+    <div class="grp"><span class="gt">공정</span>
+      <div class="ctl"><label for="temp">온도 (°C)</label>
+        <input type="range" id="temp" min="100" max="300" step="5" value="200"><output id="tempv"></output></div>
+      <div class="ctl"><label for="d0">기준 D₀ @200°C (nm²/s)</label>
+        <input type="range" id="d0" min="0" max="2" step="0.05" value="1"><output id="d0v"></output></div>
+      <div class="ctl"><label for="ea">활성화에너지 E_a (eV)</label>
+        <input type="range" id="ea" min="0.3" max="1.5" step="0.05" value="0.8"><output id="eav"></output></div>
+      <div class="ctl"><label for="drift">H⁺ 드리프트 (nm/s)</label>
+        <input type="range" id="drift" min="-8" max="8" step="0.5" value="0"><output id="driftv"></output></div>
+    </div>
+    <div class="grp"><span class="gt">소스·경계</span>
+      <div class="ctl"><label for="srctype">유입 모드</label>
+        <select id="srctype">
+          <option value="point">임펄스 · point</option>
+          <option value="gauss" selected>임펄스 · Gaussian</option>
+          <option value="flux">지속 유입 (PEB 동안)</option>
+        </select></div>
+      <div class="ctl"><label for="sigma">Gaussian σ (nm)</label>
+        <input type="range" id="sigma" min="1.5" max="10" step="0.5" value="5"><output id="sigmav"></output></div>
+      <div class="ctl"><label for="tpeb">PEB 시간 (s)</label>
+        <input type="range" id="tpeb" min="10" max="120" step="5" value="60"><output id="tpebv"></output></div>
+      <div class="ctl"><label for="topbc">상부 경계 (PEB 후)</label>
+        <select id="topbc"><option value="sealed" selected>밀폐 (캡)</option>
+        <option value="open">개방 (outgassing)</option></select></div>
+    </div>
+    <div class="grp"><span class="gt">보기·실행</span>
+      <div class="ctl"><label for="fld">필드</label>
+        <select id="fld"><option value="u" selected>이동상</option><option value="w">포획상</option></select></div>
+      <div class="ctl"><label for="scl">스케일</label>
+        <select id="scl"><option value="log" selected>log</option><option value="lin">linear</option></select></div>
+      <div class="ctl"><label for="zp">XY 깊이 z (nm)</label>
+        <input type="range" id="zp" min="1" max="34" step="0.5" value="12"><output id="zpv"></output></div>
+      <div class="ctl"><label for="speed">배속 (모사초/실초)</label>
+        <input type="range" id="speed" min="0" max="2" step="0.1" value="1"><output id="speedv"></output></div>
+      <div class="ctl"><label for="res">해상도</label>
+        <select id="res"><option value="fast" selected>빠름 32³ 급</option><option value="fine">정밀 48³ 급</option></select></div>
+      <div class="ctl"><label>&nbsp;</label>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <button id="play" class="primary">일시정지</button>
+          <button id="reset">다시 시작</button>
+          <button id="ghost">기준 저장</button>
+          <button id="report">리포트 복사</button>
+        </div></div>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="card">
+      <h2><span class="dot" style="background:var(--h0)"></span>H⁰ 중성 — 자유부피 홉핑, 얕은 포획</h2>
+      <div class="viewrow">
+        <div class="xz">
+          <div class="axlab"><span>XZ 단면 · 위 = MOR 계면, 아래 = 기판 (클릭: 소스 이동)</span></div>
+          <canvas id="xz0" class="field" width="48" height="72"></canvas>
+        </div>
+        <div class="xy">
+          <div class="axlab"><span>XY @z</span></div>
+          <canvas id="xy0" class="field" width="48" height="48"></canvas>
+        </div>
+      </div>
+      <div class="cbar"><span>낮음</span><canvas id="cb0" class="cb" width="128" height="1"></canvas><span>높음</span></div>
+      <div class="stats">침투 <b id="pen0">–</b> · 포획 <b id="tr0">–</b> · 기판 도달 <b id="bt0">–</b> · 상부 방출 <b id="og0">–</b></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot" style="background:var(--hp)"></span>H⁺ 이온 — sp² 사이트 홉핑, 깊은 포획, 드리프트</h2>
+      <div class="viewrow">
+        <div class="xz">
+          <div class="axlab"><span>XZ 단면 · 위 = MOR 계면, 아래 = 기판 (클릭: 소스 이동)</span></div>
+          <canvas id="xz1" class="field" width="48" height="72"></canvas>
+        </div>
+        <div class="xy">
+          <div class="axlab"><span>XY @z</span></div>
+          <canvas id="xy1" class="field" width="48" height="48"></canvas>
+        </div>
+      </div>
+      <div class="cbar"><span>낮음</span><canvas id="cb1" class="cb" width="128" height="1"></canvas><span>높음</span></div>
+      <div class="stats">침투 <b id="pen1">–</b> · 포획 <b id="tr1">–</b> · 기판 도달 <b id="bt1">–</b> · 상부 방출 <b id="og1">–</b></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="charts">
+      <div class="chart"><h3>깊이 프로파일 c̄(z) — SIMS 비교용</h3><canvas id="c_prof" class="curve"></canvas></div>
+      <div class="chart"><h3>평균 침투 깊이 z̄(t)</h3><canvas id="c_pen" class="curve"></canvas></div>
+      <div class="chart"><h3>포획 분율</h3><canvas id="c_trap" class="curve"></canvas></div>
+      <div class="chart"><h3>기판 도달 누적</h3><canvas id="c_bt" class="curve"></canvas></div>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--h0)"></i>H⁰</span>
+      <span><i style="background:var(--hp)"></i>H⁺</span>
+      <span id="ghlab" hidden><i class="gh"></i>기준 (저장분)</span>
+      <span>t = <b id="tval" style="color:var(--ink)">0.0</b> s <b id="phase" style="color:var(--muted);font-weight:500"></b></span>
+      <span class="cons">질량 보존 오차 <b id="cons0">–</b> / <b id="cons1">–</b></span>
+    </div>
+  </div>
+
+  <details>
+    <summary>가정표 — 수식, 기본값, 근거, 조정 경로</summary>
+    <p>격자 h = 0.5 nm(정밀) 또는 0.75 nm(빠름), 막 두께 36 nm. 종별 2-장 모델:</p>
+    <p class="fm">∂u/∂t = ∇·(D(x,T)∇u) − v_d ∂u/∂z − k_t(x)·u·(1 − w/N_t(x)) + k_d(T)·w,&nbsp;&nbsp;
+    ∂w/∂t = +k_t·u·(1 − w/N_t) − k_d·w</p>
+    <table>
+      <tr><th>항목</th><th>기본값</th><th>성격</th><th>비고</th></tr>
+      <tr><td>D₀(H⁰) @200°C</td><td>10 nm²/s (노브 1–100)</td><td>가정 (문헌 산포 큼)</td><td>fab 캘리브레이션 대상 — 요청 ⑥ 연계</td></tr>
+      <tr><td>E_a (확산)</td><td>0.8 eV (노브 0.3–1.5)</td><td>가정</td><td>Arrhenius: D(T)=D₀·exp[−E_a/k_B·(1/T−1/T₀)], T₀=473 K</td></tr>
+      <tr><td>sp³ 의존</td><td>D₀ ∝ exp(−2.2·(sp³−0.15))</td><td>경향 (Track B)</td><td>치밀 사면체 네트워크가 채널을 닫음</td></tr>
+      <tr><td>S_G 의존</td><td>D(x)=D₀·exp(0.9·S_G·ξ)</td><td>경향 (Track B)</td><td>ξ: 상관길이 ~1.5 nm 가우시안 무질서장</td></tr>
+      <tr><td>H⁺ 이동</td><td>D ∝ sp² 가용도 s(x)², 기준 0.5·D₀</td><td>경향</td><td>π-사이트 홉핑; 드리프트 v_d는 스택 대전 편향의 대용</td></tr>
+      <tr><td>포획 (H⁰)</td><td>k_t=0.05 s⁻¹, k_d@200°C=1 s⁻¹ (E_a 0.4 eV)</td><td>가정</td><td>얕은 물리흡착형</td></tr>
+      <tr><td>포획 (H⁺)</td><td>k_t=3·(1−s) s⁻¹, k_d@200°C=0.02 s⁻¹ (E_a 0.9 eV)</td><td>가정</td><td>깊은 결함형 — 계면 축적의 원인</td></tr>
+      <tr><td>트랩 용량</td><td>N_t 노브 (Langmuir 포화)</td><td>가정</td><td>w ≤ N_t: 재고 채워지면 투과가 가속</td></tr>
+    </table>
+    <p class="note">수치: 명시적 유한체적, 면 확산계수는 조화평균, 드리프트는 상류차분,
+    dt는 안정한계의 60%로 자동 설정. 질량 보존 오차(주입 대비 재고+유출 합)는 범례 우측에 상시 표시되며
+    0.5% 초과 시 붉게 표시됩니다. 모든 기본값은 상대 경향이 목적이며, 절대 보정은 하이닉스 계측
+    상관 세트(데이터 요청 ⑥)와 SIMS 프로파일 대조로 수행하는 것이 본 과제의 경로입니다.</p>
+  </details>
+</div>
+
+<script>
+'use strict';
+const kB=8.617e-5, T0=473.15;
+// ---------------- dynamic grid ----------------
+let NX,NY,NZ,N,H,idx,S,XI,STEPBUF;
+function makeGrid(fine){
+  NX=fine?48:32; NY=NX; NZ=fine?72:48; H=36/NZ; N=NX*NY*NZ;
+  idx=(x,y,z)=>x+NX*(y+NY*z);
+  STEPBUF=new Float32Array(N);
+  S={u:[new Float32Array(N),new Float32Array(N)], w:[new Float32Array(N),new Float32Array(N)],
+     D:[new Float32Array(N),new Float32Array(N)], kt:[new Float32Array(N),new Float32Array(N)],
+     Nt:[new Float32Array(N),new Float32Array(N)], kd:[1,0.02],
+     esc:[0,0], og:[0,0], inj:[0,0], t:0, dt:1e-3, running:true,
+     srcx:NX>>1, srcy:NY>>1, srcz:Math.max(2,Math.round(1.5/H)),
+     hist:{t:[],pen:[[],[]],trap:[[],[]],bt:[[],[]]}};
+  for(const sp of[0,1]){el['xz'+sp].width=NX; el['xz'+sp].height=NZ;
+    el['xy'+sp].width=NX; el['xy'+sp].height=NY;}
+  makeXi();
+}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function makeXi(){
+  XI=new Float32Array(N);
+  const r=mulberry32(+el.seed.value||1);
+  for(let i=0;i<N;i++)XI[i]=r()*2-1;
+  const tmp=new Float32Array(N), passes=Math.round(1.5/H);
+  for(let p=0;p<Math.max(2,passes);p++){
+    for(let z=0;z<NZ;z++)for(let y=0;y<NY;y++)for(let x=0;x<NX;x++){
+      let s=0,c=0;
+      for(let d=-1;d<=1;d+=2){
+        const xx=x+d,yy=y+d,zz=z+d;
+        if(xx>=0&&xx<NX){s+=XI[idx(xx,y,z)];c++}
+        if(yy>=0&&yy<NY){s+=XI[idx(x,yy,z)];c++}
+        if(zz>=0&&zz<NZ){s+=XI[idx(x,y,zz)];c++}
+      }
+      tmp[idx(x,y,z)]=(s+XI[idx(x,y,z)])/(c+1);
+    }
+    XI.set(tmp);
+  }
+  let m=0,v=0;for(let i=0;i<N;i++)m+=XI[i];m/=N;
+  for(let i=0;i<N;i++){XI[i]-=m;v+=XI[i]*XI[i]}v=Math.sqrt(v/N)||1;
+  for(let i=0;i<N;i++)XI[i]/=v;
+}
+function arrh(T,Ea){return Math.exp(-Ea/kB*(1/(T+273.15)-1/T0))}
+function buildFields(){
+  const R=+el.rsp.value, sG=+el.sg.value, Nt0=+el.nt.value;
+  const T=+el.temp.value, D0a=Math.pow(10,+el.d0.value), Ea=+el.ea.value;
+  const sp2=R/(1+R), sp3=1-sp2, sig=0.9*sG;
+  const A=arrh(T,Ea);
+  const D0h=D0a*Math.exp(-2.2*Math.max(sp3-0.15,0))*A;
+  const D0i=0.5*D0a*A;
+  S.kd[0]=1.0*arrh(T,0.4); S.kd[1]=0.02*arrh(T,0.9);
+  let Dmax=1e-9;
+  for(let i=0;i<N;i++){
+    const x=XI[i];
+    const d0=D0h*Math.exp(sig*x);
+    S.D[0][i]=d0;
+    const s=Math.min(Math.max(sp2*(1+0.8*x),0),1);
+    S.D[1][i]=D0i*s*s;
+    S.kt[0][i]=0.05;
+    S.kt[1][i]=3.0*(1-s);
+    S.Nt[0][i]=Nt0*(1+0.3*x);
+    S.Nt[1][i]=Nt0*(1-s+0.15);
+    if(d0>Dmax)Dmax=d0; if(S.D[1][i]>Dmax)Dmax=S.D[1][i];
+  }
+  const vd=Math.abs(+el.drift.value);
+  const dtD=0.6*0.16*H*H/Dmax, dtA=vd>0?0.5*H/vd:1e9, dtK=0.2/Math.max(3,1);
+  S.dt=Math.min(dtD,dtA,dtK,0.05);
+}
+function seedImpulse(){
+  const type=el.srctype.value;
+  if(type==='flux')return;
+  const sig2=Math.pow((+el.sigma.value)/H,2);
+  if(type==='point'){
+    for(const sp of[0,1]){S.u[sp][idx(S.srcx,S.srcy,S.srcz)]=1000;S.inj[sp]=1000}
+  }else{
+    for(const sp of[0,1]){let tot=0;
+      for(let z=0;z<NZ;z++)for(let y=0;y<NY;y++)for(let x=0;x<NX;x++){
+        const r2=(x-S.srcx)**2+(y-S.srcy)**2+(z-S.srcz)**2;
+        const v=Math.exp(-r2/(2*sig2));
+        if(v>1e-4){S.u[sp][idx(x,y,z)]=v;tot+=v}
+      }
+      S.inj[sp]=tot;
+    }
+  }
+}
+function resetSim(){
+  S.u[0].fill(0);S.u[1].fill(0);S.w[0].fill(0);S.w[1].fill(0);
+  S.esc=[0,0];S.og=[0,0];S.inj=[0,0];S.t=0;
+  S.hist={t:[],pen:[[],[]],trap:[[],[]],bt:[[],[]]};
+  seedImpulse();
+}
+function step(sp){
+  const u=S.u[sp],w=S.w[sp],D=S.D[sp],kt=S.kt[sp],NtF=S.Nt[sp],kd=S.kd[sp],dt=S.dt;
+  const un=STEPBUF, h2=H*H, tPEB=+el.tpeb.value, openTop=el.topbc.value==='open'&&S.t>tPEB;
+  const vd=sp===1?(+el.drift.value)/H:0;   // cells/s, + toward substrate
+  const influx=el.srctype.value==='flux'&&S.t<tPEB;
+  const sig2=Math.pow((+el.sigma.value)/H,2), J=30;
+  for(let z=0;z<NZ;z++)for(let y=0;y<NY;y++)for(let x=0;x<NX;x++){
+    const i=idx(x,y,z), ui=u[i], Di=D[i];
+    let flux=0;
+    const face=(j)=>{const Dj=D[j];const Dm=(Di>0&&Dj>0)?2*Di*Dj/(Di+Dj):0;return Dm*(u[j]-ui)/h2};
+    if(x>0)flux+=face(i-1); if(x<NX-1)flux+=face(i+1);
+    if(y>0)flux+=face(i-NX); if(y<NY-1)flux+=face(i+NX);
+    if(z>0)flux+=face(i-NX*NY);
+    else if(openTop){S.og[sp]+=Di*ui/h2*dt;flux+=Di*(0-ui)/h2}
+    if(z<NZ-1)flux+=face(i+NX*NY);
+    else{S.esc[sp]+=Di*ui/h2*dt;flux+=Di*(0-ui)/h2}
+    if(vd!==0){
+      const up=vd>0?(z>0?u[i-NX*NY]:0):(z<NZ-1?u[i+NX*NY]:0);
+      flux+=Math.abs(vd)*(up-ui);
+      if(vd>0&&z===NZ-1){} // handled by absorb above approximately
+    }
+    let src=0;
+    if(influx&&z===S.srcz){
+      const r2=(x-S.srcx)**2+(y-S.srcy)**2;
+      src=J*Math.exp(-r2/(2*sig2));
+      S.inj[sp]+=src*dt;
+    }
+    const cap=NtF[i]>0?Math.max(0,1-w[i]/NtF[i]):0;
+    const trap=kt[i]*ui*cap-kd*w[i];
+    un[i]=ui+dt*(flux-trap+src);
+    if(un[i]<0)un[i]=0;
+    w[i]+=dt*trap; if(w[i]<0)w[i]=0;
+  }
+  u.set(un);
+}
+// ---------------- rendering ----------------
+const el={};
+['rsp','sg','nt','seed','temp','d0','ea','drift','srctype','sigma','tpeb','topbc',
+ 'fld','scl','zp','speed','res','play','reset','ghost','report',
+ 'rspv','sgv','ntv','tempv','d0v','eav','driftv','sigmav','tpebv','zpv','speedv',
+ 'xz0','xz1','xy0','xy1','cb0','cb1','pen0','pen1','tr0','tr1','bt0','bt1','og0','og1',
+ 'c_prof','c_pen','c_trap','c_bt','tval','phase','cons0','cons1','ghlab']
+ .forEach(k=>el[k]=document.getElementById(k));
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function hex2rgb(h){h=h.replace('#','');return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]}
+let RAMP=[[],[]];
+function buildRamps(){
+  const bgc=css('--panel'); const bg=hex2rgb(bgc.startsWith('#')?bgc:'#ffffff');
+  for(const sp of[0,1]){
+    const base=hex2rgb(css(sp?'--hp':'--h0'));
+    const deep=base.map(c=>Math.round(c*0.45));
+    RAMP[sp]=new Uint8Array(256*3);
+    for(let k=0;k<256;k++){
+      const t=k/255; let r,g,b;
+      if(t<0.55){const s=t/0.55;r=bg[0]+(base[0]-bg[0])*s;g=bg[1]+(base[1]-bg[1])*s;b=bg[2]+(base[2]-bg[2])*s}
+      else{const s=(t-0.55)/0.45;r=base[0]+(deep[0]-base[0])*s;g=base[1]+(deep[1]-base[1])*s;b=base[2]+(deep[2]-base[2])*s}
+      RAMP[sp][3*k]=r;RAMP[sp][3*k+1]=g;RAMP[sp][3*k+2]=b;
+    }
+    const cb=el['cb'+sp].getContext('2d'),img=cb.createImageData(128,1);
+    for(let x=0;x<128;x++){const k=Math.round(x/127*255);
+      img.data[4*x]=RAMP[sp][3*k];img.data[4*x+1]=RAMP[sp][3*k+1];
+      img.data[4*x+2]=RAMP[sp][3*k+2];img.data[4*x+3]=255}
+    cb.putImageData(img,0,0);
+  }
+}
+function mapVal(v,vmax,log){
+  if(vmax<=0)return 0;
+  if(log){const d=Math.log10(Math.max(v/vmax,3.16e-4));return Math.max(0,Math.min(1,(d+3.5)/3.5))}
+  return Math.max(0,Math.min(1,v/vmax));
+}
+function drawField(sp){
+  const fld=el.fld.value==='w'?S.w[sp]:S.u[sp], log=el.scl.value==='log';
+  let vmax=1e-12;for(let i=0;i<N;i++)if(fld[i]>vmax)vmax=fld[i];
+  const cxz=el['xz'+sp].getContext('2d'),img=cxz.createImageData(NX,NZ),y0=NY>>1;
+  for(let z=0;z<NZ;z++)for(let x=0;x<NX;x++){
+    const v=mapVal(fld[idx(x,y0,z)],vmax,log),k=Math.round(v*255),p=4*(x+NX*z);
+    img.data[p]=RAMP[sp][3*k];img.data[p+1]=RAMP[sp][3*k+1];img.data[p+2]=RAMP[sp][3*k+2];img.data[p+3]=255;
+  }
+  cxz.putImageData(img,0,0);
+  const zp=Math.min(NZ-1,Math.round((+el.zp.value)/H));
+  const cxy=el['xy'+sp].getContext('2d'),img2=cxy.createImageData(NX,NY);
+  for(let y=0;y<NY;y++)for(let x=0;x<NX;x++){
+    const v=mapVal(fld[idx(x,y,zp)],vmax,log),k=Math.round(v*255),p=4*(x+NX*y);
+    img2.data[p]=RAMP[sp][3*k];img2.data[p+1]=RAMP[sp][3*k+1];img2.data[p+2]=RAMP[sp][3*k+2];img2.data[p+3]=255;
+  }
+  cxy.putImageData(img2,0,0);
+}
+function measure(sp){
+  const u=S.u[sp],w=S.w[sp];
+  let tu=0,tw=0,mz=0;
+  for(let z=0;z<NZ;z++){let sl=0;
+    for(let y=0;y<NY;y++)for(let x=0;x<NX;x++){const i=idx(x,y,z);sl+=u[i];tw+=w[i]}
+    tu+=sl;mz+=sl*z;
+  }
+  const tot=tu+tw+S.esc[sp]+S.og[sp];
+  const cons=S.inj[sp]>0?Math.abs(tot-S.inj[sp])/S.inj[sp]:0;
+  return{pen:tu>0?(mz/tu)*H:0,trap:tot>0?tw/tot:0,bt:tot>0?S.esc[sp]/tot:0,
+         og:tot>0?S.og[sp]/tot:0,cons};
+}
+function profile(sp){
+  const u=S.u[sp],w=S.w[sp],pr=new Float32Array(NZ);
+  for(let z=0;z<NZ;z++){let s=0;
+    for(let y=0;y<NY;y++)for(let x=0;x<NX;x++){const i=idx(x,y,z);s+=u[i]+w[i]}
+    pr[z]=s/(NX*NY);
+  }
+  return pr;
+}
+const LASTM=[{},{}];
+function fmtPct(x,d){return(x*100).toFixed(d)+'%'}
+function updateStats(){
+  for(const sp of[0,1]){
+    const m=measure(sp);LASTM[sp]=m;
+    el['pen'+sp].textContent=m.pen.toFixed(1)+' nm';
+    el['tr'+sp].textContent=fmtPct(m.trap,1);
+    el['bt'+sp].textContent=fmtPct(m.bt,2);
+    el['og'+sp].textContent=fmtPct(m.og,2);
+    const c=el['cons'+sp];c.textContent=fmtPct(m.cons,2);
+    c.className=m.cons>0.005?'bad':'good';
+  }
+  el.tval.textContent=S.t.toFixed(1);
+  const tPEB=+el.tpeb.value;
+  el.phase.textContent=el.srctype.value==='flux'?(S.t<tPEB?'(PEB 유입 중)':'(PEB 종료 후)'):'';
+}
+// ---------------- curves ----------------
+let GHOST=null;
+function sizeCurves(){
+  for(const id of['c_prof','c_pen','c_trap','c_bt']){
+    const c=el[id],r=c.getBoundingClientRect();
+    c.width=Math.max(200,Math.round(r.width*devicePixelRatio));
+    c.height=Math.round(150*devicePixelRatio);
+  }
+}
+function axes(g,W,H_,dp,ymaxLab,yfmt){
+  const padL=36*dp,padB=16*dp,padT=6*dp,padR=8*dp;
+  g.strokeStyle=css('--gridln');g.lineWidth=1;
+  g.fillStyle=css('--muted');g.font=`${10*dp}px Archivo Narrow, Arial`;
+  for(const fr of[0,0.5,1]){
+    const y=padT+(H_-padT-padB)*(1-fr);
+    g.beginPath();g.moveTo(padL,y);g.lineTo(W-padR,y);g.stroke();
+    g.fillText(yfmt(ymaxLab*fr),2*dp,y+3*dp);
+  }
+  return{padL,padB,padT,padR};
+}
+function drawTime(id,key,yfmt,ghKey){
+  const c=el[id],g=c.getContext('2d'),W=c.width,H_=c.height,dp=devicePixelRatio;
+  g.clearRect(0,0,W,H_);
+  const t=S.hist.t;if(t.length<2)return;
+  let ymax=1e-9;
+  for(const sp of[0,1])for(const v of S.hist[key][sp])if(v>ymax)ymax=v;
+  if(GHOST)for(const sp of[0,1])for(const v of GHOST.hist[key][sp])if(v>ymax)ymax=v;
+  const P=axes(g,W,H_,dp,ymax,yfmt);ymax*=1.08;
+  const tend=Math.max(t[t.length-1],GHOST?GHOST.hist.t[GHOST.hist.t.length-1]||0:0);
+  const X=(tt)=>P.padL+(W-P.padL-P.padR)*tt/tend;
+  const Y=v=>P.padT+(H_-P.padT-P.padB)*(1-v/ymax);
+  const draw=(ts,ds,col,dash)=>{g.strokeStyle=col;g.lineWidth=2*dp;
+    g.setLineDash(dash?[4*dp,4*dp]:[]);g.beginPath();
+    for(let i=0;i<ts.length;i++){const x=X(ts[i]),y=Y(ds[i]);i?g.lineTo(x,y):g.moveTo(x,y)}
+    g.stroke();g.setLineDash([])};
+  if(GHOST){draw(GHOST.hist.t,GHOST.hist[key][0],css('--h0'),true);
+            draw(GHOST.hist.t,GHOST.hist[key][1],css('--hp'),true)}
+  draw(t,S.hist[key][0],css('--h0'),false);
+  draw(t,S.hist[key][1],css('--hp'),false);
+}
+function drawProfile(){
+  const c=el.c_prof,g=c.getContext('2d'),W=c.width,H_=c.height,dp=devicePixelRatio;
+  g.clearRect(0,0,W,H_);
+  const p0=profile(0),p1=profile(1);
+  let ymax=1e-9;
+  for(const p of[p0,p1])for(const v of p)if(v>ymax)ymax=v;
+  if(GHOST)for(const p of GHOST.prof)for(const v of p)if(v>ymax)ymax=v;
+  const P=axes(g,W,H_,dp,1,fr=>fr===0?'1e-3':fr===0.5?'0.03':'1');
+  const X=z=>P.padL+(W-P.padL-P.padR)*z/(NZ-1);
+  const Y=v=>{const lv=Math.max(Math.log10(Math.max(v/ymax,1e-3)),-3);
+    return P.padT+(H_-P.padT-P.padB)*(-lv/3)};
+  const draw=(p,col,dash)=>{g.strokeStyle=col;g.lineWidth=2*dp;
+    g.setLineDash(dash?[4*dp,4*dp]:[]);g.beginPath();
+    for(let z=0;z<p.length;z++){const x=X(z*(NZ-1)/(p.length-1)),y=Y(p[z]);z?g.lineTo(x,y):g.moveTo(x,y)}
+    g.stroke();g.setLineDash([])};
+  if(GHOST){draw(GHOST.prof[0],css('--h0'),true);draw(GHOST.prof[1],css('--hp'),true)}
+  draw(p0,css('--h0'),false);draw(p1,css('--hp'),false);
+  g.fillStyle=css('--muted');g.font=`${10*dp}px Archivo Narrow, Arial`;
+  g.fillText('계면 0',P.padL,H_-3*dp);g.fillText('기판 36 nm',W-60*dp,H_-3*dp);
+}
+function drawCurves(){
+  drawProfile();
+  drawTime('c_pen','pen',v=>v.toFixed(1));
+  drawTime('c_trap','trap',v=>(v*100).toFixed(0)+'%');
+  drawTime('c_bt','bt',v=>(v*100).toFixed(1)+'%');
+}
+const tip=document.createElement('div');tip.className='tip';tip.hidden=true;document.body.appendChild(tip);
+for(const[id,key,f]of[['c_pen','pen',v=>v.toFixed(1)+' nm'],['c_trap','trap',v=>(v*100).toFixed(1)+'%'],['c_bt','bt',v=>(v*100).toFixed(2)+'%']]){
+  el[id].addEventListener('mousemove',e=>{
+    const t=S.hist.t;if(t.length<2){tip.hidden=true;return}
+    const r=el[id].getBoundingClientRect();
+    const frac=Math.max(0,Math.min(1,(e.clientX-r.left-32)/(r.width-40)));
+    const i=Math.min(t.length-1,Math.round(frac*(t.length-1)));
+    tip.innerHTML=`t=${t[i].toFixed(1)} s<br>H⁰ ${f(S.hist[key][0][i])} · H⁺ ${f(S.hist[key][1][i])}`;
+    tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY+10)+'px';tip.hidden=false;
+  });
+  el[id].addEventListener('mouseleave',()=>tip.hidden=true);
+}
+el.c_prof.addEventListener('mousemove',e=>{
+  const r=el.c_prof.getBoundingClientRect();
+  const frac=Math.max(0,Math.min(1,(e.clientX-r.left-32)/(r.width-40)));
+  const z=frac*36;
+  const p0=profile(0),p1=profile(1),zi=Math.min(NZ-1,Math.round(frac*(NZ-1)));
+  tip.innerHTML=`z=${z.toFixed(1)} nm<br>H⁰ ${p0[zi].toExponential(1)} · H⁺ ${p1[zi].toExponential(1)}`;
+  tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY+10)+'px';tip.hidden=false;
+});
+el.c_prof.addEventListener('mouseleave',()=>tip.hidden=true);
+// ---------------- main loop ----------------
+let frame=0,lastWall=0;
+function loop(ts){
+  if(S.running){
+    const speed=Math.pow(10,+el.speed.value);       // sim s per wall s
+    const wall=lastWall?Math.min((ts-lastWall)/1000,0.1):0.016;
+    lastWall=ts;
+    let nsub=Math.round(speed*wall/S.dt);
+    nsub=Math.max(1,Math.min(nsub,NX>40?10:24));
+    for(let k=0;k<nsub;k++){step(0);step(1);S.t+=S.dt}
+    if(frame%3===0){
+      S.hist.t.push(S.t);
+      for(const sp of[0,1]){const m=measure(sp);
+        S.hist.pen[sp].push(m.pen);S.hist.trap[sp].push(m.trap);S.hist.bt[sp].push(m.bt)}
+      if(S.hist.t.length>700)
+        for(const a of[S.hist.t,...S.hist.pen,...S.hist.trap,...S.hist.bt])
+          for(let i=a.length-2;i>0;i-=2)a.splice(i,1);
+    }
+    drawField(0);drawField(1);
+    if(frame%5===0){updateStats();drawCurves()}
+    frame++;
+  }else{lastWall=ts}
+  requestAnimationFrame(loop);
+}
+// ---------------- wiring ----------------
+function refreshLabels(){
+  const R=+el.rsp.value;
+  el.rspv.textContent=R.toFixed(1)+' (sp² '+Math.round(R/(1+R)*100)+'%)';
+  el.sgv.textContent=(+el.sg.value).toFixed(2);
+  el.ntv.textContent=(+el.nt.value).toFixed(1)+'×';
+  el.tempv.textContent=el.temp.value+' °C';
+  el.d0v.textContent=Math.pow(10,+el.d0.value).toFixed(1)+' nm²/s';
+  el.eav.textContent=(+el.ea.value).toFixed(2)+' eV';
+  el.driftv.textContent=(+el.drift.value).toFixed(1)+' nm/s '+((+el.drift.value)>0?'(기판쪽)':(+el.drift.value)<0?'(계면쪽)':'');
+  el.sigmav.textContent=(+el.sigma.value).toFixed(1)+' nm';
+  el.tpebv.textContent=el.tpeb.value+' s';
+  el.zpv.textContent=(+el.zp.value).toFixed(1)+' nm';
+  el.speedv.textContent='×'+Math.pow(10,+el.speed.value).toFixed(1);
+}
+function rebuild(){refreshLabels();buildFields();resetSim()}
+function fieldOnly(){refreshLabels();buildFields()}
+for(const id of['rsp','sg','nt'])el[id].addEventListener('input',rebuild);
+for(const id of['temp','d0','ea','drift'])el[id].addEventListener('input',fieldOnly);
+el.seed.addEventListener('change',()=>{makeXi();rebuild()});
+el.srctype.addEventListener('input',resetSim);
+el.sigma.addEventListener('input',()=>{refreshLabels();if(el.srctype.value!=='flux')resetSim()});
+el.tpeb.addEventListener('input',refreshLabels);
+el.zp.addEventListener('input',()=>{refreshLabels();drawField(0);drawField(1)});
+el.fld.addEventListener('input',()=>{drawField(0);drawField(1)});
+el.scl.addEventListener('input',()=>{drawField(0);drawField(1)});
+el.speed.addEventListener('input',refreshLabels);
+el.res.addEventListener('input',()=>{makeGrid(el.res.value==='fine');buildFields();resetSim()});
+el.play.addEventListener('click',()=>{S.running=!S.running;el.play.textContent=S.running?'일시정지':'재생'});
+el.reset.addEventListener('click',resetSim);
+el.ghost.addEventListener('click',()=>{
+  if(GHOST){GHOST=null;el.ghost.textContent='기준 저장';el.ghlab.hidden=true}
+  else{GHOST={hist:JSON.parse(JSON.stringify(S.hist)),prof:[profile(0),profile(1)]};
+    el.ghost.textContent='기준 해제';el.ghlab.hidden=false}
+  drawCurves();
+});
+function toast(msg){const d=document.createElement('div');d.className='toast';d.textContent=msg;
+  document.body.appendChild(d);setTimeout(()=>d.remove(),1800)}
+el.report.addEventListener('click',()=>{
+  const L=[
+    'ACL 수소 수송 시뮬레이터 리포트 (트렌드 수준, t='+S.t.toFixed(1)+' s)',
+    '조건: sp2/sp3='+el.rsp.value+' (sp2 '+Math.round((+el.rsp.value)/(1+ +el.rsp.value)*100)+'%), S_G='+el.sg.value+
+    ', N_t='+el.nt.value+'x, seed='+el.seed.value,
+    '공정: T='+el.temp.value+'C, D0='+Math.pow(10,+el.d0.value).toFixed(1)+' nm2/s, Ea='+el.ea.value+
+    ' eV, drift(H+)='+el.drift.value+' nm/s, 유입='+el.srctype.value+', t_PEB='+el.tpeb.value+' s, 상부='+el.topbc.value,
+    'H0: 침투 '+LASTM[0].pen.toFixed(1)+' nm, 포획 '+fmtPct(LASTM[0].trap,1)+', 기판 도달 '+fmtPct(LASTM[0].bt,2)+
+    ', 상부 방출 '+fmtPct(LASTM[0].og,2)+', 보존오차 '+fmtPct(LASTM[0].cons,2),
+    'H+: 침투 '+LASTM[1].pen.toFixed(1)+' nm, 포획 '+fmtPct(LASTM[1].trap,1)+', 기판 도달 '+fmtPct(LASTM[1].bt,2)+
+    ', 상부 방출 '+fmtPct(LASTM[1].og,2)+', 보존오차 '+fmtPct(LASTM[1].cons,2),
+  ].join('\n');
+  try{navigator.clipboard.writeText(L).then(()=>toast('리포트를 복사했습니다'),
+      ()=>{toast('복사 실패 — 콘솔 확인');console.log(L)})}
+  catch(e){toast('복사 실패 — 콘솔 확인');console.log(L)}
+});
+for(const id of['xz0','xz1'])el[id].addEventListener('click',e=>{
+  const r=el[id].getBoundingClientRect();
+  S.srcx=Math.max(1,Math.min(NX-2,Math.round((e.clientX-r.left)/r.width*NX)));
+  S.srcz=Math.max(1,Math.min(NZ-6,Math.round((e.clientY-r.top)/r.height*NZ)));
+  resetSim();
+});
+const PRESETS={
+  std:{rsp:1.5,sg:1.0,nt:1.0,temp:200,d0:1,ea:0.8,drift:0,srctype:'flux',tpeb:60,topbc:'sealed'},
+  tac:{rsp:0.3,sg:0.5,nt:0.6,temp:200,d0:1,ea:1.0,drift:0,srctype:'flux',tpeb:60,topbc:'sealed'},
+  low:{rsp:2.5,sg:1.8,nt:1.5,temp:200,d0:1.3,ea:0.6,drift:0,srctype:'flux',tpeb:60,topbc:'sealed'},
+  hot:{rsp:1.5,sg:1.0,nt:1.0,temp:250,d0:1,ea:0.8,drift:0,srctype:'flux',tpeb:45,topbc:'open'},
+};
+document.querySelectorAll('.presets button').forEach(b=>b.addEventListener('click',()=>{
+  const p=PRESETS[b.dataset.p];
+  for(const k in p)el[k].value=p[k];
+  rebuild();toast('프리셋 적용: '+b.textContent);
+}));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{buildRamps();drawCurves()});
+addEventListener('resize',()=>{sizeCurves();drawCurves()});
+
+makeGrid(false); refreshLabels(); buildRamps(); buildFields();
+el.srctype.value='flux'; resetSim(); sizeCurves(); requestAnimationFrame(loop);
+</script>
