@@ -1,3 +1,4 @@
 streamlit>=1.32
 numpy>=1.26
 matplotlib>=3.8
+plotly>=5.18

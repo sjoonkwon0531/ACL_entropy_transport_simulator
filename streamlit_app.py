@@ -5,6 +5,8 @@
 모든 기본값은 트렌드 수준 가정이며, 가정표(하단 expander)에 근거를 명시한다.
 """
 import io
+import json
+import os
 import numpy as np
 import streamlit as st
 import matplotlib
@@ -193,6 +195,91 @@ def simulate(R, sG, Nt0, seed, T_c, logD0, Ea, drift, src, sigma_nm, t_peb,
 st.title("ACL 수소 수송 시뮬레이터")
 st.caption("비정질 탄소 하부막 3D 셀 · H⁰(중성) vs H⁺(이온) · 실단위(초, nm) · "
            "기본값은 트렌드 수준 가정 — 하단 가정표 참조")
+
+
+# ---------------------------------------------------------------- 3D 구조 뷰어
+mode = st.sidebar.radio("모드", ["수송 시뮬레이션", "네트워크 구조 뷰어"], key="mode")
+if mode == "네트워크 구조 뷰어":
+    import plotly.graph_objects as go
+
+    @st.cache_data(show_spinner=False)
+    def load_structures():
+        p = os.path.join(os.path.dirname(__file__), "structures.json")
+        return json.load(open(p, encoding="utf-8"))
+
+    STR = load_structures()
+    st.subheader("a-C:H 네트워크 구조 뷰어 — Track B ReaxFF 라이브러리 (실제 구조 12개)")
+    st.caption("melt-quench 반응 MD로 만든 C₁₅₀H₃₈ 셀. 드래그로 회전, 스크롤로 확대. "
+               "5-원환(pentagon) 강조를 켜면 수소 수송을 여는 곡률 결함 위치가 보입니다.")
+    cols = st.columns([2, 1, 1, 1])
+    order = sorted(STR, key=lambda t: -STR[t]["Drel"])
+    tag = cols[0].selectbox(
+        "구조 선택 (D_H 빠른 순)", order,
+        format_func=lambda t: f'{STR[t]["label"]} · D_rel {STR[t]["Drel"]:.3f} · 5-ring {STR[t]["f5"]:.2f}')
+    show5 = cols[1].toggle("5-원환 강조", value=True)
+    showH = cols[2].toggle("H 원자 표시", value=True)
+    showbox = cols[3].toggle("셀 경계", value=True)
+    d = STR[tag]
+    pos = np.array(d["pos"]); typ = np.array(d["typ"]); L = d["L"]
+    ring5 = set(d["ring5"])
+    coordn = np.zeros(len(pos), int)
+    for a, b in d["bonds"]:
+        coordn[a-1] += 1; coordn[b-1] += 1
+    traces = []
+    bx = []; by = []; bz = []
+    b5x = []; b5y = []; b5z = []
+    for a, b in d["bonds"]:
+        pa, pb = pos[a-1], pos[b-1]
+        tgt = (bx, by, bz)
+        if show5 and a in ring5 and b in ring5:
+            tgt = (b5x, b5y, b5z)
+        tgt[0].extend([pa[0], pb[0], None])
+        tgt[1].extend([pa[1], pb[1], None])
+        tgt[2].extend([pa[2], pb[2], None])
+    traces.append(go.Scatter3d(x=bx, y=by, z=bz, mode="lines",
+        line=dict(color="#9aa3ad", width=3), hoverinfo="skip", name="C-C/C-H 결합"))
+    if b5x:
+        traces.append(go.Scatter3d(x=b5x, y=b5y, z=b5z, mode="lines",
+            line=dict(color="#b06c1a", width=8), hoverinfo="skip", name="5-원환 결합"))
+    isC = typ == 1
+    sp3m = isC & (coordn >= 4); sp2m = isC & (coordn < 4)
+    r5m = np.array([(i+1) in ring5 for i in range(len(pos))])
+    def atoms(mask, color, size, name):
+        if not mask.any(): return
+        p = pos[mask]
+        traces.append(go.Scatter3d(x=p[:,0], y=p[:,1], z=p[:,2], mode="markers",
+            marker=dict(size=size, color=color, line=dict(width=1, color="#444444")),
+            name=name, hovertemplate=name+"<extra></extra>"))
+    atoms(sp3m & ~r5m, "#2b3440", 7, "C (sp3형, 4배위)")
+    atoms(sp2m & ~r5m, "#6b7684", 7, "C (sp2형, 3배위 이하)")
+    if show5: atoms(isC & r5m, "#b06c1a", 9, "C (5-원환)")
+    if showH: atoms(~isC, "#c9d2da", 4, "H")
+    if showbox:
+        e = [0, L]
+        for a_ in e:
+            for b_ in e:
+                traces.append(go.Scatter3d(x=[0,L], y=[a_,a_], z=[b_,b_], mode="lines",
+                    line=dict(color="#cccccc", width=2), hoverinfo="skip", showlegend=False))
+                traces.append(go.Scatter3d(x=[a_,a_], y=[0,L], z=[b_,b_], mode="lines",
+                    line=dict(color="#cccccc", width=2), hoverinfo="skip", showlegend=False))
+                traces.append(go.Scatter3d(x=[a_,a_], y=[b_,b_], z=[0,L], mode="lines",
+                    line=dict(color="#cccccc", width=2), hoverinfo="skip", showlegend=False))
+    fig = go.Figure(data=traces)
+    fig.update_layout(height=650, margin=dict(l=0, r=0, t=10, b=0),
+        scene=dict(xaxis=dict(visible=False), yaxis=dict(visible=False),
+                   zaxis=dict(visible=False), aspectmode="cube"),
+        legend=dict(orientation="h", y=0.02))
+    st.plotly_chart(fig, use_container_width=True)
+    m1c, m2c, m3c, m4c, m5c = st.columns(5)
+    m1c.metric("밀도", f'{d["rho"]:.1f} g/cc')
+    m2c.metric("냉각 시간", d["quench"])
+    m3c.metric("5-원환 분율", f'{d["f5"]:.2f}')
+    m4c.metric("sp³ 분율", f'{d["sp3"]:.2f}')
+    m5c.metric("D_H (상대)", f'{d["Drel"]:.3f}')
+    st.caption("배위수 기반 sp² / sp³ 구분 (트렌드 수준). Track B 판정: 같은 밀도에서 "
+               "5-원환 분율이 수소 확산을 가장 잘 예측 (r² = 0.70, n = 8; 풀링 12구조에서 밀도 자체보다 우위). "
+               "빠른 구조(m2, d15a)와 막힌 쌍둥이(m1, d15b)를 번갈아 보면 차이가 눈에 들어옵니다.")
+    st.stop()
 
 with st.sidebar:
     st.header("재료")
